@@ -1,6 +1,7 @@
 // ***** Sensor Libraries *****
 #include <Pixy2.h>
 #include <RPLidar.h>
+
 #define RPLIDAR_MOTOR 8  // PWM pin for RPLIDAR motor control
 
 // Create instances
@@ -8,19 +9,25 @@ Pixy2 pixy;
 RPLidar lidar;
 
 // Define pin assignments
-const int MOTOR_CW_PIN = 9;    //In1 Pin on Driver (CW)
-const int MOTOR_CCW_PIN = 10;  //In2 Pin on Driver (CCW)
+const int MOTOR_CW_PIN = 10;    //In1 Pin on Driver (CW)
+const int MOTOR_CCW_PIN = 9;  //In2 Pin on Driver (CCW)
 const int ACTUATOR_UP_PIN = 4;
 const int ACTUATOR_DOWN_PIN = 5;
 const int TRIGGER_PIN_HIGH = 11;
 const int TRIGGER_PIN_LOW = 12;
+
+
+const float TOLERANCE = 2.0;
+const float MS_PER_DEGREE = 5;
+const int MOTOR_SPEED = 150;
+const int MOTOR_CCW_SPEED = 175;
 
 // User Defined Lidar Constants
 const int MIN_D = 50;        // User defined distance minimum
 const int MAX_D = 1000;      // User defined distance maximum
 const int MIN_A = 0;         // User defined angle minimum
 const int MAX_A = 360;       // User defined angle maximum
-const int MAX_POINTS = 500;  // User defined Max Points Scanned
+const int MAX_POINTS = 250;  // User defined Max Points Scanned
 
 // Lidar Variables
 float avgDistance = 0;
@@ -33,8 +40,7 @@ float targetAngle = 0;
 float targetDistance = 0;
 
 // Variables
-float currentTurretAngle = 0;
-int PWM = 0; // Motor PWM
+float currentTurretAngle = 0.0;
 
 
 
@@ -192,27 +198,27 @@ void moveTurret(float targetTurretAngle) {  // Move Turret About Z (Yaw)
   float target = (targetTurretAngle <= 180.0f ? targetTurretAngle : targetTurretAngle - 360.0f);
   float error = target - currentTurretAngle;
 
-  if (fabs(error) < 3) {
+  if (fabs(error) < TOLERANCE) {
     analogWrite(MOTOR_CW_PIN, 0);
     analogWrite(MOTOR_CCW_PIN, 0);
-    currentTurretAngle = targetTurretAngle;
     return;
   }
-  // int PWM = constrain(abs(error) * 3, 50, 255);
-  PWM = 90;
-  if (error > 0 && targetTurretAngle > 0 && targetTurretAngle < 180) {
-    analogWrite(MOTOR_CW_PIN, PWM);
+  int runTime = (int)(fabs(error) * MS_PER_DEGREE);
+  if (error > 0) {
+    analogWrite(MOTOR_CW_PIN, MOTOR_SPEED);
     analogWrite(MOTOR_CCW_PIN, 0);
     Serial.println("Turning Clockwise...");
-    delay(1000);
   } else {
     analogWrite(MOTOR_CW_PIN, 0);
-    analogWrite(MOTOR_CCW_PIN, PWM);
+    analogWrite(MOTOR_CCW_PIN, MOTOR_CCW_SPEED);
     Serial.println("Turning Counter Clockwise...");
-    delay(1000);
   }
-  currentTurretAngle += 15;
-  delay(100);
+  Serial.print(runTime);
+  Serial.println("ms");
+  delay(runTime);
+  analogWrite(MOTOR_CW_PIN, 0);
+  analogWrite(MOTOR_CCW_PIN, 0);
+  currentTurretAngle = target;
 }
 
 // void moveTilt(int direction, float angle){ // Move Turret About X (Pitch)
