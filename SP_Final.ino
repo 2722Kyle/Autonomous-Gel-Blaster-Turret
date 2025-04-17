@@ -82,35 +82,75 @@ void loop() {
     case SCAN:
       {
         Serial.println("State = SCAN");
-        float runningSumDistance = 0.0;
-        float runningSumAngle = 0.0;
-        int validPointCount = 0;
+        if (IS_OK(lidar.waitPoint())) {
+          //perform data processing here... 
+          float distance = lidar.getCurrentPoint().distance;
+          float angle = lidar.getCurrentPoint().angle;
+    
+          if (lidar.getCurrentPoint().startBit) {
+            // a new scan, display the previous data...
+             move360motor(angleAtMinDist, minDistance);
+       
+             minDistance = 1000;
+             angleAtMinDist = 0;
 
-        while (validPointCount < MAX_POINTS) {
-          if (IS_OK(lidar.waitPoint())) {
-            float distance = lidar.getCurrentPoint().distance;
-            float angle = lidar.getCurrentPoint().angle;
+             Serial.print("angle is: ");
+             Serial.print(angleAtMinDist);
+             Serial.print(" distance is: ");
+             Serial.print(minDistance);
 
-            // Only consider valid scan points (exclude startBit markers and out-of-range data)
-            if (!lidar.getCurrentPoint().startBit && distance >= MIN_D && distance <= MAX_D) {
 
-              LIDAR_printData(angle, distance);
-              Serial.println(validPointCount);
-              runningSumDistance += distance;
-              runningSumAngle += angle;
-              validPointCount++;
+          } else {
+               if ( distance > 0 &&  distance < minDistance) {
+                  minDistance = distance;
+                  angleAtMinDist = angle;
+                  Serial.print("angle is: ");
+                  Serial.print(angleAtMinDist);
+                  Serial.print(" distance is: ");
+                  Serial.print(minDistance);
+                 }
             }
           } else {
-            // Recovery logic for failed communication
-            analogWrite(RPLIDAR_MOTOR, 0);
-
+            analogWrite(RPLIDAR_MOTOR, 0); //stop the rplidar motor
+    
+            // try to detect RPLIDAR... 
             rplidar_response_device_info_t info;
             if (IS_OK(lidar.getDeviceInfo(info, 100))) {
-              lidar.startScan();
-              analogWrite(RPLIDAR_MOTOR, 255);
-              delay(1000);
+               //detected...
+               lidar.startScan();
+               analogWrite(RPLIDAR_MOTOR, 255);
+               delay(1000);
             }
-          }
+  }
+        // float runningSumDistance = 0.0;
+        // float runningSumAngle = 0.0;
+        // int validPointCount = 0;
+
+        // while (validPointCount < MAX_POINTS) {
+        //   if (IS_OK(lidar.waitPoint())) {
+        //     float distance = lidar.getCurrentPoint().distance;
+        //     float angle = lidar.getCurrentPoint().angle;
+
+        //     // Only consider valid scan points (exclude startBit markers and out-of-range data)
+        //     if (!lidar.getCurrentPoint().startBit && distance >= MIN_D && distance <= MAX_D) {
+
+        //       LIDAR_printData(angle, distance);
+        //       Serial.println(validPointCount);
+        //       runningSumDistance += distance;
+        //       runningSumAngle += angle;
+        //       validPointCount++;
+        //     }
+        //   } else {
+        //     // Recovery logic for failed communication
+        //     analogWrite(RPLIDAR_MOTOR, 0);
+
+        //     rplidar_response_device_info_t info;
+        //     if (IS_OK(lidar.getDeviceInfo(info, 100))) {
+        //       lidar.startScan();
+        //       analogWrite(RPLIDAR_MOTOR, 255);
+        //       delay(1000);
+        //     }
+        //   }
         }
 
         // --- After collecting data, compute averages ---
@@ -193,6 +233,25 @@ void LIDAR_printData(float angle, float distance) {  // Print lidar data for deb
   Serial.print("    angle: ");
   Serial.println(angle);
 }
+
+void move360motor(float angle, float distance)
+{
+      if (angle >= 10 && angle <= 179) {
+    analogWrite(motorRight, 90);  // Turn right at full speed
+    analogWrite(motorLeft, 0);     // Make sure left motor is off
+    Serial.println("Turning Right");
+   } 
+    else if (angle >= 181 && angle <= 350) {
+    analogWrite(motorLeft, 90);   // Turn left at full speed
+    analogWrite(motorRight, 0);    // Make sure right motor is off
+    Serial.println("Turning Left");
+   } 
+    else {
+    // If angle is exactly 180 or out of bounds, stop both
+    analogWrite(motorRight, 0);
+    analogWrite(motorLeft, 0);
+    Serial.println("No Turn");
+   }
 
 void moveTurret(float targetTurretAngle) {  // Move Turret About Z (Yaw)
   float target = (targetTurretAngle <= 180.0f ? targetTurretAngle : targetTurretAngle - 360.0f);
