@@ -13,13 +13,13 @@ const int MOTOR_CW_PIN = 10;    //In1 Pin on Driver (CW)
 const int MOTOR_CCW_PIN = 9;  //In2 Pin on Driver (CCW)
 const int ACTUATOR_UP_PIN = 4;
 const int ACTUATOR_DOWN_PIN = 5;
-const int TRIGGER_PIN_HIGH = 11;
-const int TRIGGER_PIN_LOW = 12;
+const int TRIGGER_PIN_POS = 11;
+const int TRIGGER_PIN_NEG = 12;
 
 
 const float TOLERANCE = 2.0;
 const float MS_PER_DEGREE = 5;
-const int MOTOR_SPEED = 150;
+const int MOTOR_SPEED = 175;
 const int MOTOR_CCW_SPEED = 175;
 
 // User Defined Lidar Constants
@@ -27,7 +27,7 @@ const int MIN_D = 50;        // User defined distance minimum
 const int MAX_D = 1000;      // User defined distance maximum
 const int MIN_A = 0;         // User defined angle minimum
 const int MAX_A = 360;       // User defined angle maximum
-const int MAX_POINTS = 250;  // User defined Max Points Scanned
+const int MAX_POINTS = 100;  // User defined Max Points Scanned
 
 // Lidar Variables
 float avgDistance = 0;
@@ -41,9 +41,19 @@ float targetDistance = 0;
 
 // Variables
 float currentTurretAngle = 0.0;
+float currentTiltAngle = 0.0;
 
+const int PIXY_CENTER_X = 158;
+const int PIXY_CENTER_Y = 116;
+const int X_THRESHOLD = 25;
+const int Y_THRESHOLD = 10; 
+int panPos = 485;
+int tiltPos = 425;
+const float PAN_SWEEP_DEG = 180.0f;
+const float TILT_SWEEP_DEG = 90.0f;
 
-
+int lowest_Xerror = X_THRESHOLD;
+int new_Xerror = X_THRESHOLD;
 // State machine
 enum State {
   SCAN,
@@ -70,9 +80,9 @@ void setup() {
   pinMode(RPLIDAR_MOTOR, OUTPUT);
 
   pixy.init();
-
-  pinMode(TRIGGER_PIN_HIGH, OUTPUT);
-  digitalWrite(TRIGGER_PIN_HIGH, LOW);
+  pixy.setServos(panPos, tiltPos);
+  pinMode(TRIGGER_PIN_POS, LOW);
+  digitalWrite(TRIGGER_PIN_NEG, LOW);
 
   Serial.println("System initialized. Entering scan mode...");
 }
@@ -81,47 +91,7 @@ void loop() {
   switch (currentState) {
     case SCAN:
       {
-        Serial.println("State = SCAN");
-        if (IS_OK(lidar.waitPoint())) {
-          //perform data processing here... 
-          float distance = lidar.getCurrentPoint().distance;
-          float angle = lidar.getCurrentPoint().angle;
-    
-          if (lidar.getCurrentPoint().startBit) {
-            // a new scan, display the previous data...
-             move360motor(angleAtMinDist, minDistance);
-       
-             minDistance = 1000;
-             angleAtMinDist = 0;
-
-             Serial.print("angle is: ");
-             Serial.print(angleAtMinDist);
-             Serial.print(" distance is: ");
-             Serial.print(minDistance);
-
-
-          } else {
-               if ( distance > 0 &&  distance < minDistance) {
-                  minDistance = distance;
-                  angleAtMinDist = angle;
-                  Serial.print("angle is: ");
-                  Serial.print(angleAtMinDist);
-                  Serial.print(" distance is: ");
-                  Serial.print(minDistance);
-                 }
-            }
-          } else {
-            analogWrite(RPLIDAR_MOTOR, 0); //stop the rplidar motor
-    
-            // try to detect RPLIDAR... 
-            rplidar_response_device_info_t info;
-            if (IS_OK(lidar.getDeviceInfo(info, 100))) {
-               //detected...
-               lidar.startScan();
-               analogWrite(RPLIDAR_MOTOR, 255);
-               delay(1000);
-            }
-  }
+        // Serial.println("State = SCAN");
         // float runningSumDistance = 0.0;
         // float runningSumAngle = 0.0;
         // int validPointCount = 0;
@@ -151,59 +121,160 @@ void loop() {
         //       delay(1000);
         //     }
         //   }
-        }
+        // }
 
-        // --- After collecting data, compute averages ---
-        avgDistance = runningSumDistance / validPointCount;
-        avgAngle = runningSumAngle / validPointCount;
+        // // --- After collecting data, compute averages ---
+        // avgDistance = runningSumDistance / validPointCount;
+        // avgAngle = runningSumAngle / validPointCount;
 
-        Serial.print("Average Distance (mm): ");
-        Serial.println(avgDistance);
-        Serial.print("Average Angle (deg): ");
-        Serial.println(avgAngle);
+        // Serial.print("Average Distance (mm): ");
+        // Serial.println(avgDistance);
+        // Serial.print("Average Angle (deg): ");
+        // Serial.println(avgAngle);
 
 
-        delay(5000);
+        delay(1000);
         currentState = MOVE;
         break;
       }
 
     case MOVE:
       {
-        Serial.println("State = MOVE");
+        // Serial.println("State = MOVE");
 
-        //gradually adjust toward target positions
-        moveTurret(avgAngle);
-        Serial.print("Moving. Angle:");
-        Serial.println(avgAngle);
-        //When near target, move to validation
-        // if (abs(currentTurretAngle - avgAngle) < 5) {
+        // //gradually adjust toward target positions
+        // moveTurret(avgAngle);
+        // Serial.print("Moving. Angle: ");
+        // Serial.println(avgAngle);
+        // //When near target, move to validation
         currentState = VALIDATE;
-        // }
-
-
-
         break;
       }
 
     case VALIDATE:
       {
-        Serial.println("State = VALIDATE");
+        // Serial.println("State = VALIDATE");
+        // //Code to move motors as a function of pixy pan/tilt (polling)
+        // int count = pixy.ccc.getBlocks();
+        // if (count == 0){
+        //   return;
+        // }
+        // auto &b = pixy.ccc.blocks[0];
+        // int errorX = -(b.m_x - PIXY_CENTER_X);
+        // int errorY = b.m_y - PIXY_CENTER_Y;
 
-        // Pixy validation logic goes here (currently bypassed)
-        delay(1000);
-        currentState = SHOOT;
-        break;
-      }
+        // int oldPan = panPos;
+        // int oldTilt = tiltPos;
+
+        // if (abs(errorX) > X_THRESHOLD){
+        //   panPos = constrain(panPos + errorX * 4, 0, 1000);
+        // }
+        // if (abs(errorY) > Y_THRESHOLD){
+        //   tiltPos = constrain(tiltPos + errorY * 4, 0, 1000);
+        // }
+        // pixy.setServos(panPos, tiltPos);
+        // int dPan = panPos - oldPan;
+        // int dTilt = tiltPos - oldTilt;
+
+        // float degPan = (dPan / 1000.0f) * PAN_SWEEP_DEG;
+        // float degTilt = (dTilt / 1000.0f) * TILT_SWEEP_DEG;
+
+        // if (degPan > 0){
+        //   analogWrite(MOTOR_CW_PIN, 100);
+        //   analogWrite(MOTOR_CCW_PIN, 0);
+        // }
+        // else{
+        //   analogWrite(MOTOR_CW_PIN, 0);
+        //   analogWrite(MOTOR_CCW_PIN, 100);
+        // }
+        // if (degTilt > 0){
+        //   analogWrite(ACTUATOR_UP_PIN, 100);
+        //   analogWrite(ACTUATOR_DOWN_PIN, 0);
+        // }
+        // else{
+        //   analogWrite(ACTUATOR_UP_PIN, 0);
+        //   analogWrite(ACTUATOR_DOWN_PIN, 100);
+        // }
+        // Somewhat working code
+        pixy.ccc.getBlocks();
+        if (pixy.ccc.numBlocks > 0) {
+          auto &b = pixy.ccc.blocks[0];
+          int errorX = b.m_x - PIXY_CENTER_X;
+          int errorY = b.m_y - PIXY_CENTER_Y;
+          errorX = -errorX;
+          
+
+          Serial.print("Error in X: ");
+          Serial.println(errorX);
+          Serial.print("Error in Y: ");
+          Serial.println(errorY);
+
+          if (abs(errorX) > X_THRESHOLD) {
+            // panPos += errorX * 0.75;
+            // pixy.setServos(panPos, tiltPos);
+            new_Xerror = (abs(errorX));
+
+            Serial.print ("current error is = ");
+            Serial.println (new_Xerror);
+            if(lowest_Xerror > (abs(new_Xerror))){
+              lowest_Xerror = new_Xerror;
+            }
+            Serial.print("lowest error is");
+            Serial.println(lowest_Xerror);
+
+            if (errorX < -40){
+              analogWrite(MOTOR_CW_PIN, 0);
+              analogWrite(MOTOR_CCW_PIN, 110);
+            }
+            
+            else if (errorX > 40){
+              analogWrite(MOTOR_CW_PIN, 110);
+              analogWrite(MOTOR_CCW_PIN, 0);
+            }
+            else {
+              analogWrite(MOTOR_CW_PIN, 0);
+              analogWrite(MOTOR_CCW_PIN, 0);
+            }
+
+            Serial.println("Adjusting Rotation...");
+            
+          }
+          if (abs(errorY) > Y_THRESHOLD){
+            tiltPos += errorY * 0.75;
+            pixy.setServos(panPos, tiltPos);
+            if (errorY < 0){
+              analogWrite(ACTUATOR_UP_PIN, 0);
+              analogWrite(ACTUATOR_DOWN_PIN, 255);
+            }
+            if (errorY > 0){
+              analogWrite(ACTUATOR_UP_PIN, 255);
+              analogWrite(ACTUATOR_DOWN_PIN, 0);
+            }
+            Serial.println("Adjusting Tilt...");
+          }
+          if (abs(errorX) <= X_THRESHOLD && abs(errorY) <= Y_THRESHOLD){
+            Serial.println("Target aligned...");
+            delay(10);
+            Serial.println("Beginning to Shoot...");
+            currentState = VALIDATE;
+          }
+        }
+        else {
+          Serial.println("Target lost. Restarting Scan...");
+          currentState = VALIDATE;
+           analogWrite(MOTOR_CW_PIN, 0);
+          analogWrite(MOTOR_CCW_PIN, 0);
+           analogWrite(ACTUATOR_UP_PIN, 0);
+              analogWrite(ACTUATOR_DOWN_PIN, 0);
+        }
+      break;
+    }
 
     case SHOOT:
       {
         Serial.println("State = SHOOT");
-
-        // digitalWrite(TRIGGER_PIN, HIGH);
-        // delay(100);
-        // digitalWrite(TRIGGER_PIN, LOW);
-
+        digitalWrite(TRIGGER_PIN_POS, HIGH);
+        digitalWrite(TRIGGER_PIN_NEG, LOW);
         delay(1000);
         currentState = RESET;
         break;
@@ -234,25 +305,6 @@ void LIDAR_printData(float angle, float distance) {  // Print lidar data for deb
   Serial.println(angle);
 }
 
-void move360motor(float angle, float distance)
-{
-      if (angle >= 10 && angle <= 179) {
-    analogWrite(motorRight, 90);  // Turn right at full speed
-    analogWrite(motorLeft, 0);     // Make sure left motor is off
-    Serial.println("Turning Right");
-   } 
-    else if (angle >= 181 && angle <= 350) {
-    analogWrite(motorLeft, 90);   // Turn left at full speed
-    analogWrite(motorRight, 0);    // Make sure right motor is off
-    Serial.println("Turning Left");
-   } 
-    else {
-    // If angle is exactly 180 or out of bounds, stop both
-    analogWrite(motorRight, 0);
-    analogWrite(motorLeft, 0);
-    Serial.println("No Turn");
-   }
-
 void moveTurret(float targetTurretAngle) {  // Move Turret About Z (Yaw)
   float target = (targetTurretAngle <= 180.0f ? targetTurretAngle : targetTurretAngle - 360.0f);
   float error = target - currentTurretAngle;
@@ -279,23 +331,3 @@ void moveTurret(float targetTurretAngle) {  // Move Turret About Z (Yaw)
   analogWrite(MOTOR_CCW_PIN, 0);
   currentTurretAngle = target;
 }
-
-// void moveTilt(int direction, float angle){ // Move Turret About X (Pitch)
-//   int error = targetTiltAngle - currentTiltAngle;
-//   if (abs(error) < 3){
-//     analogWrite(tilt_up_pin, 0);
-//     analogWrite(tilt_down_pin, 0);
-//     return;
-//   }
-//   int PWM = constrain(abs(error)*3, 50, 255);
-//   if (error > 0){
-//     analogWrite(tilt_down_pin, PWM);
-//     analogWrite(tilt_up_pin, 0);
-//   }
-//   else{
-//     analogWrite(tilt_down_pin, 0);
-//     analogWrite(tilt_up_pin, PWM);
-//   }
-//   currentTiltAngle += error / 10;
-//   delay(100);
-// }
